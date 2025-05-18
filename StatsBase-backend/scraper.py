@@ -1,10 +1,16 @@
-from playwright.sync_api import sync_playwright
-
-def scrape():
-    with sync_playwright() as p:
-        browser = p.chromium.launch(headless=True)
-        page = browser.new_page()
-        page.goto("https://example.com")
-        title = page.title()
-        browser.close()
-        return {"title": title}
+def scrape_instagram_profile(username, max_posts=12):
+    # Sahte veriler – frontend testleri için
+    return {
+        "total_likes": 1200,
+        "total_comments": 300,
+        "avg_likes": 100,
+        "avg_comments": 25,
+        "avg_views": 200,
+        "post_count": 10,
+        "reel_count": 4,
+        "collaboration_count": 3,
+        "posts": [
+            {"has_collaboration": True, "mentions": ["nike", "adidas"]},
+            {"has_collaboration": False, "mentions": []}
+        ]
+    }
