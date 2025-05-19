@@ -1,109 +1,134 @@
-/* Global Reset */
+/* index.css */
+
+:root {
+  --bg-color: #f5f5f7;
+  --text-color: #1c1c1e;
+  --accent: #007aff;
+  --card-bg: #ffffff;
+  --card-hover: #f0f0f5;
+  --font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+}
+
 body {
   margin: 0;
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-  background-color: #f5f5f7;
-  color: #1c1c1e;
+  font-family: var(--font-family);
+  background-color: var(--bg-color);
+  color: var(--text-color);
   line-height: 1.6;
 }
 
-h1, h2, h3 {
-  margin: 0;
+h1 {
+  font-size: 2.5rem;
+  margin: 2rem 0 1rem;
+  text-align: center;
 }
 
 .container {
   max-width: 600px;
-  margin: 40px auto;
-  padding: 0 20px;
+  margin: 0 auto;
+  padding: 2rem;
 }
 
-/* Apple-Inspired Soft Card */
+/* Search Bar */
+.search-group {
+  display: flex;
+  align-items: center;
+  background: var(--card-bg);
+  border-radius: 16px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+  padding: 0.5rem 1rem;
+  margin-bottom: 2rem;
+}
+
+.search-group input {
+  flex: 1;
+  border: none;
+  outline: none;
+  font-size: 1rem;
+  padding: 0.5rem;
+  background: transparent;
+}
+
+.search-group button {
+  background: var(--accent);
+  color: white;
+  border: none;
+  padding: 0.5rem 1rem;
+  border-radius: 12px;
+  font-weight: bold;
+  cursor: pointer;
+  transition: background 0.3s ease;
+}
+
+.search-group button:hover {
+  background: #005bb5;
+}
+
+/* User Data Card */
 .card {
-  background: #ffffff;
+  background: var(--card-bg);
   border-radius: 24px;
-  box-shadow: 0 12px 24px rgba(0, 0, 0, 0.06);
-  padding: 24px 28px;
-  margin-top: 24px;
-  transition: box-shadow 0.2s ease;
+  padding: 1.5rem 2rem;
+  box-shadow: 0 12px 24px rgba(0,0,0,0.06);
+  margin-bottom: 2rem;
 }
 
 .card:hover {
-  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.08);
+  box-shadow: 0 20px 40px rgba(0,0,0,0.08);
 }
 
-/* Emoji + Label */
 .card-title {
-  font-size: 1.4rem;
+  font-size: 1.3rem;
   font-weight: bold;
+  margin-bottom: 1rem;
   display: flex;
   align-items: center;
-  gap: 8px;
-  margin-bottom: 20px;
+  gap: 0.5rem;
 }
 
 .info-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 12px;
+  gap: 1rem;
 }
 
 .info-box {
-  background: #f0f0f5;
+  background: var(--card-hover);
   border-radius: 16px;
-  padding: 12px 16px;
-  transition: background 0.3s;
+  padding: 1rem;
+  transition: background 0.3s ease;
 }
 
 .info-box:hover {
   background: #e5e5ea;
 }
 
-.info-box span {
-  display: block;
-  font-size: 0.85rem;
-  color: #636366;
-  margin-top: 4px;
-}
-
-/* List */
-.collab-list {
-  margin-top: 20px;
-  padding-left: 20px;
-  color: #3a3a3c;
-}
-
-/* Input */
-.input-group {
-  display: flex;
-  align-items: center;
-  background: #ffffff;
-  border-radius: 20px;
-  box-shadow: 0 4px 12px rgba(0,0,0,0.04);
-  padding: 8px 12px;
-  margin: 0 auto;
-  max-width: 600px;
-}
-
-.input-group input {
-  flex: 1;
-  border: none;
-  outline: none;
-  background: transparent;
-  padding: 8px;
-  font-size: 1rem;
-}
-
-.input-group button {
-  border: none;
-  background: #007aff;
-  color: white;
-  padding: 8px 16px;
-  border-radius: 16px;
+.info-box .label {
   font-weight: bold;
-  cursor: pointer;
-  transition: background 0.2s ease;
 }
 
-.input-group button:hover {
-  background: #005bb5;
+.collab-list {
+  margin-top: 1.5rem;
+  padding-left: 1rem;
+}
+
+.progress-container {
+  margin: 20px auto;
+  text-align: center;
+  max-width: 400px;
+}
+
+.progress-bar {
+  height: 10px;
+  background-color: #ddd;
+  border-radius: 8px;
+  overflow: hidden;
+  margin-top: 8px;
+}
+
+.progress-fill {
+  height: 100%;
+  background-color: #007aff;
+  width: 0%;
+  transition: width 0.4s ease-in-out;
 }
