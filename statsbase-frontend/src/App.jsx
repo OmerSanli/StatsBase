@@ -1,21 +1,21 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState } from 'react';
 
 function App() {
-  const [response, setResponse] = useState('Loading...')
+  const [message, setMessage] = useState('Loading...');
 
   useEffect(() => {
-    fetch('http://127.0.0.1:5000/api/test')
-      .then(res => res.json())
-      .then(data => setResponse(data.message))
-      .catch(err => setResponse('Error: ' + err.message))
-  }, [])
+    fetch(`${import.meta.env.VITE_API_BASE_URL}/api/test`)
+      .then((res) => res.json())
+      .then((data) => setMessage(data.message))
+      .catch((err) => setMessage('Backend error'));
+  }, []);
 
   return (
-    <div>
-      <h1>StatsBase Frontend</h1>
-      <p>Backend says: {response}</p>
+    <div style={{ padding: "2rem", color: "white", backgroundColor: "#1a1a1a", height: "100vh" }}>
+      <h1>StatsBase</h1>
+      <p>Backend says: {message}</p>
     </div>
-  )
+  );
 }
 
-export default App
+export default App;
