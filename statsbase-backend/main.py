@@ -3,7 +3,7 @@ from flask_cors import CORS
 import instaloader
 
 app = Flask(__name__)
-CORS(app)
+CORS(app, origins=["https://statsbase.netlify.app"])
 
 @app.route("/api/instagram/<username>", methods=["GET"])
 def scrape_instagram(username):
