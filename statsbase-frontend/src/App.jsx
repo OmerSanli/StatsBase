@@ -1,19 +1,27 @@
-import { useEffect, useState } from 'react';
+import { useState } from "react";
+import UsernameInput from "./components/UsernameInput";
+import UserDataCard from "./components/UserDataCard";
+
 
 function App() {
-  const [message, setMessage] = useState('Loading...');
+  const [username, setUsername] = useState("");
+  const [userData, setUserData] = useState(null);
 
-  useEffect(() => {
-    fetch(`${import.meta.env.VITE_API_BASE_URL}/api/test`)
-      .then((res) => res.json())
-      .then((data) => setMessage(data.message))
-      .catch((err) => setMessage('Backend error'));
-  }, []);
+  const fetchUserData = async (username) => {
+    try {
+      const response = await fetch(`https://statsbase.onrender.com/api/stats/${username}`);
+      const json = await response.json();
+      setUserData(json);
+    } catch (error) {
+      console.error("Veri çekme hatası:", error);
+    }
+  };
 
   return (
-    <div style={{ padding: "2rem", color: "white", backgroundColor: "#1a1a1a", height: "100vh" }}>
-      <h1>StatsBase</h1>
-      <p>Backend says: {message}</p>
+    <div className="min-h-screen bg-zinc-950 text-white p-4">
+      <h1>📊 StatsBase Frontend</h1>
+      <UsernameInput onSubmit={fetchUserData} />
+      {userData && <UserDataCard data={userData} username={username} />}
     </div>
   );
 }
