@@ -1,3 +1,5 @@
+import React, { useState } from "react";
+
 export default function UsernameInput({ onSubmit }) {
   const [username, setUsername] = useState("");
 
