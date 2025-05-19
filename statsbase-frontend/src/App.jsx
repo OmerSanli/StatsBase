@@ -10,6 +10,7 @@ function App() {
   const [coldStart, setColdStart] = useState(false);
 
   const fetchUserData = async (username) => {
+    setUsername(username);
     setUserData(null); // her yeni sorguda eski datayı sıfırla
     setLoading(true);
     setColdStart(false);
