@@ -5,7 +5,7 @@ app = Flask(__name__)
 CORS(app)
 
 # Test endpoint (zaten vardı)
-@app.route('/api/stats/testuser')
+@app.route('/api/test')
 def test():
     return jsonify({"message": "Hello from Flask!"})
 
