@@ -1,0 +1,16 @@
+services:
+  - type: web
+    name: statsbase-backend
+    env: python
+    plan: free
+    buildCommand: ""
+    startCommand: gunicorn main:app
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.9.13
+    autoDeploy: true
+    branch: main
+    repo: https://github.com/OmerSanli/StatsBase
+    buildFilter:
+      paths:
+        - statsbase-backend/**
