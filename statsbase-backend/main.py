@@ -8,17 +8,19 @@ CORS(app, origins=["https://statsbase.netlify.app"])
 @app.route("/api/instagram/<username>", methods=["GET"])
 def scrape_instagram(username):
     sessionid = request.headers.get("X-IG-Session")
+
     if not sessionid:
+        print("❌ HATA: Session ID eksik")
         return jsonify({"error": "Session ID eksik"}), 400
 
     try:
         loader = instaloader.Instaloader()
-        loader.load_session_from_cookiefile(username="...", filename=None, sessionid=sessionid)
-        # veya instaloader context'e manual sessionid set et
-        # loader.context._session.cookies.set("sessionid", sessionid)
-        
-        # devamı...
+        loader.context._session.cookies.set("sessionid", sessionid)
+        profile = instaloader.Profile.from_username(loader.context, username)
+
+        # DEVAMINI BURAYA KOY
     except Exception as e:
+        print(f"🔥 EXCEPTION YAKALANDI: {e}")
         return jsonify({"error": str(e)}), 500
 
     # Profil verileri
