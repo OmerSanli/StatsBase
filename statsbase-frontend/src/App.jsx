@@ -18,7 +18,7 @@ function App() {
     const timeout = setTimeout(() => setColdStart(true), 3000); // 3 sn sonra hala cevap gelmediyse cold start kabul et
 
     try {
-      const res = await fetch(`https://statsbase.onrender.com/api/stats/${username}`);
+    const response = await fetch(`https://statsbase.onrender.com/api/instagram/${username}`);
       const data = await res.json();
       setUserData(data);
     } catch (err) {
