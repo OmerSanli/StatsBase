@@ -2,23 +2,33 @@ import { useState } from "react";
 import UsernameInput from "./components/UsernameInput";
 import UserDataCard from "./components/UserDataCard";
 import ColdStartProgress from "./components/ColdStartProgress";
+import SessionInput from "./components/SessionInput";
 
 function App() {
   const [username, setUsername] = useState("");
   const [userData, setUserData] = useState(null);
   const [loading, setLoading] = useState(false);
   const [coldStart, setColdStart] = useState(false);
+  const [sessionid, setSessionid] = useState("");
 
   const fetchUserData = async (username) => {
-    setUsername(username);
-    setUserData(null); // her yeni sorguda eski datayı sıfırla
+    if (!sessionid) {
+      alert("Önce Instagram sessionID girin.");
+      return;
+    }
+
+    setUserData(null);
     setLoading(true);
     setColdStart(false);
 
-    const timeout = setTimeout(() => setColdStart(true), 3000); // 3 sn sonra hala cevap gelmediyse cold start kabul et
+    const timeout = setTimeout(() => setColdStart(true), 3000);
 
     try {
-    const response = await fetch(`https://statsbase.onrender.com/api/instagram/${username}`);
+      const res = await fetch(`https://statsbase.onrender.com/api/instagram/${username}`, {
+        headers: {
+          "X-IG-Session": sessionid
+        }
+      });
       const data = await res.json();
       setUserData(data);
     } catch (err) {
@@ -36,13 +46,11 @@ function App() {
         📊 StatsBase
       </h1>
 
+      <SessionInput onSessionReady={setSessionid} />
       <UsernameInput onSubmit={fetchUserData} />
 
       {loading && coldStart && <ColdStartProgress />}
-      {loading && !coldStart && (
-        <p style={{ textAlign: "center", marginTop: "20px" }}>⏳ Yükleniyor...</p>
-      )}
-
+      {loading && !coldStart && <p style={{ textAlign: "center", marginTop: "20px" }}>⏳ Yükleniyor...</p>}
       {userData && <UserDataCard data={userData} username={username} />}
     </div>
   );

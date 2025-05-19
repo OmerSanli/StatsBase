@@ -1,23 +1,35 @@
 import { useState } from "react";
 
 export default function UsernameInput({ onSubmit }) {
-  const [input, setInput] = useState("");
+  const [username, setUsername] = useState("");
+  const [sessionId, setSessionId] = useState("");
 
   const handleSubmit = (e) => {
     e.preventDefault();
-    if (input.trim()) {
-      onSubmit(input.trim());
+    if (username.trim() && sessionId.trim()) {
+      onSubmit(username.trim(), sessionId.trim());
     }
   };
 
   return (
-    <form onSubmit={handleSubmit} className="search-group">
+    <form
+      onSubmit={handleSubmit}
+      className="input-group"
+      style={{ marginTop: "30px" }}
+    >
       <span>🔍</span>
       <input
         type="text"
-        placeholder="Kullanıcı adı girin..."
-        value={input}
-        onChange={(e) => setInput(e.target.value)}
+        value={username}
+        onChange={(e) => setUsername(e.target.value)}
+        placeholder="Instagram kullanıcı adı"
+      />
+      <input
+        type="text"
+        value={sessionId}
+        onChange={(e) => setSessionId(e.target.value)}
+        placeholder="sessionid (çerezden alınır)"
+        style={{ marginLeft: "10px" }}
       />
       <button type="submit">Ara</button>
     </form>
