@@ -1,27 +1,37 @@
-from flask import Flask, request, jsonify
-from flask_cors import CORS
-from scraper import scrape_instagram_data
+from fastapi import FastAPI, HTTPException, Request
+from fastapi.middleware.cors import CORSMiddleware
+from dotenv import load_dotenv
+from platform_scrapers.scraper_playwright import scrape_instagram_data
+import os
 
-app = Flask(__name__)
-CORS(app, origins=["https://statsbase.netlify.app"])
+load_dotenv()
 
-@app.route("/")
-def index():
-    return "StatsBase API is running."
+app = FastAPI()
 
-@app.route("/api/instagram/<username>", methods=["GET"])
-def get_instagram_stats(username):
-    session_id = request.headers.get("X-IG-Session")
-    
-    if not session_id:
-        return jsonify({"error": "Instagram session ID eksik."}), 400
+# CORS ayarları
+origins = [
+    "http://localhost:5173",
+    "https://statsbase.netlify.app",
+]
 
-    data = scrape_instagram_data(username, session_id)
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=origins,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
-    if "error" in data:
-        return jsonify(data), 500
+@app.get("/api/instagram/{username}")
+def get_instagram_data(username: str, request: Request):
+    sessionid = request.headers.get("X-IG-Session")
+    if not sessionid:
+        raise HTTPException(status_code=400, detail="Session ID eksik")
 
-    return jsonify(data)
-
-if __name__ == "__main__":
-    app.run(debug=True)
+    try:
+        print(f"Veri çekiliyor... kullanıcı: {username}, sessionid: {sessionid[:12]}...")
+        data = scrape_instagram_data(username, sessionid)
+        return data
+    except Exception as e:
+        print("HATA:", str(e))
+        raise HTTPException(status_code=500, detail=str(e))

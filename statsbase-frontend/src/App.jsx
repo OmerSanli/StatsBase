@@ -24,7 +24,7 @@ function App() {
     const timeout = setTimeout(() => setColdStart(true), 3000);
 
     try {
-      const res = await fetch(`https://statsbase.onrender.com/api/instagram/${username}`, {
+      const res = await fetch(`http://127.0.0.1:8000/api/instagram/${username}`, {
         headers: {
           "X-IG-Session": sessionid
         }
