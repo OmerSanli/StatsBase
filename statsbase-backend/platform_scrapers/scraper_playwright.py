@@ -29,10 +29,11 @@ def parse_post_count(text):
         return 0
 
 def extract_meta_counts(description: str):
-    """Meta açıklamadan takipçi, takip ve gönderi sayılarını ayrıştırır."""
     follower_count = following_count = posts_count = 0
     try:
-        match = re.search(r"([\d.,]+(?:[KM]|[BkMn])?)\s+Takipçi,\s+([\d.,]+)\s+Takip,\s+([\d.,]+)\s+Gönderi", description)
+        match_tr = re.search(r"([\d.,]+(?:[KM]|[BkMn])?)\s+Takipçi,\s+([\d.,]+)\s+Takip,\s+([\d.,]+)\s+Gönderi", description)
+        match_en = re.search(r"([\d.,]+(?:[KM]|[BkMn])?)\s+Followers?,\s+([\d.,]+)\s+Following,\s+([\d.,]+)\s+Posts", description)
+        match = match_tr or match_en
         if match:
             follower_count = parse_meta_count(match.group(1))
             following_count = parse_meta_count(match.group(2))
@@ -45,7 +46,7 @@ def scrape_instagram_data(username: str, sessionid: str) -> dict:
     print(f"Veri çekiliyor... kullanıcı: {username}, sessionid: {sessionid[:12]}...")
 
     with sync_playwright() as p:
-        browser = p.chromium.launch(headless=True)
+        browser = p.chromium.launch(headless=False)
         context = browser.new_context()
         context.add_cookies([{
             'name': 'sessionid',
@@ -77,7 +78,7 @@ def scrape_instagram_data(username: str, sessionid: str) -> dict:
 
             # Full name ve bio
             name_and_bio = description.split(" - ", 1)[-1]
-            match = re.search(r"Gönderi - Instagram'da (.+?) \(@", description)
+            match = re.search(r"(?:Instagram'da|on Instagram:) (.+?) \(@", description)
             full_name = match.group(1).strip() if match else ""
             biography = name_and_bio.split(":", 1)[-1].strip() if ":" in name_and_bio else ""
 
@@ -85,7 +86,7 @@ def scrape_instagram_data(username: str, sessionid: str) -> dict:
             match = re.search(r"[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+", biography)
             contact_email = match.group(0) if match else ""
 
-            # Profil fotoğrafı: 2 farklı yöntemi sırayla dener
+            # Profil fotoğrafı
             profile_pic_url = ""
             try:
                 img_element = page.locator("header img").first
@@ -104,21 +105,36 @@ def scrape_instagram_data(username: str, sessionid: str) -> dict:
             print(f"🔗 {len(post_elements)} gönderi bağlantısı bulundu...")
 
             posts = []
-            for el in post_elements[:20]:
+            for el in post_elements[:18]:  # İlk 40 gönderiyi kontrol et
                 try:
+                    # Pinli postları atla
+                    is_pinned = el.locator("svg[aria-label='Pinned']").count() > 0
+                    if is_pinned:
+                        print(f"⏭️ {el.get_attribute('href')} pinli gönderi, atlanıyor.")
+                        continue
+
                     el.hover()
                     page.wait_for_timeout(600)
+                    el.scroll_into_view_if_needed()
+                    box = el.bounding_box()
+                    if box:
+                        page.mouse.move(box["x"] + box["width"] / 2, box["y"] + box["height"] / 2)
+                    page.wait_for_timeout(1000)
 
                     href = el.get_attribute("href")
                     url = f"https://www.instagram.com{href}"
 
-                    ul_el = el.query_selector("ul")
-                    if ul_el:
-                        span_elements = ul_el.query_selector_all("li span span")
-                        likes = parse_post_count(span_elements[0].inner_text()) if len(span_elements) > 0 else 0
-                        comments = parse_post_count(span_elements[1].inner_text()) if len(span_elements) > 1 else 0
-                    else:
-                        likes = comments = 0
+
+                    is_pinned = False
+                    try:
+                        pinned_svg = page.locator(f"a[href='{href}'] svg[aria-label='Pinned']")
+                        is_pinned = pinned_svg.count() > 0
+                    except:
+                        is_pinned = False
+
+                    if is_pinned:
+                        print(f"⏩ Atlandı (pinli): {url}")
+                        continue
 
                     engagement = round((likes + comments) / follower_count, 4) if follower_count else 0
                     posts.append({
@@ -129,6 +145,8 @@ def scrape_instagram_data(username: str, sessionid: str) -> dict:
                     })
 
                     print(f"🔗 {url} | ❤️ {likes} | 💬 {comments}")
+                    if len(posts) >= 20:
+                        break
                 except Exception as e:
                     print(f"⚠️ Post alınamadı: {str(e)}")
                     continue
