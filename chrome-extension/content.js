@@ -1,165 +1,170 @@
-/* StatBase v0.2.0 – IG web API ile veri çekme (stabil)
- * - Profil sayfasını algılar
- * - web_profile_info endpoint'inden son 12 gönderi + sayıları alır
- * - Pinli içerikleri eler, ortalamaları hesaplar, ER üretir
- * - Paneli günceller
- */
+// Robust IG grid scraper (hover + focus + retry)
+// Çalışma mantığı: her post <a> için scrollIntoView → mouseover/mouseenter/mousemove → focus
+// 150ms bekle → overlay ul>li>span okumaya çalış → 3 kez retry.
 
 (function () {
-  const STATE = { running: false };
+  const SLEEP = (ms) => new Promise(r => setTimeout(r, ms));
 
-  // ---------- Yardımcılar ----------
-  function isProfilePage() {
-    const path = location.pathname.split("?")[0].split("#")[0];
-    const parts = path.split("/").filter(Boolean);
-    if (parts.length === 1) {
-      const blocked = new Set([
-        "explore","reels","direct","accounts","p","tv","stories",
-        "about","developer","web","ads","directory"
-      ]);
-      return !blocked.has(parts[0]);
-    }
-    return false;
+  // "292 B", "1,2 Mn", "429" → Number
+  function parseCount(str) {
+    if (!str) return null;
+    let s = String(str).trim().toLowerCase();
+    s = s.replace(/\u00A0/g, ' ');          // &nbsp;
+    s = s.replace(/\./g, '');               // 1.234 → 1234 (TR)
+    s = s.replace(',', '.');                // 1,2 → 1.2
+    // Instagram TR kısaltmaları:
+    // "B" ~ bin, "Mn" ~ milyon
+    if (/\bmn\b/.test(s)) return Math.round(parseFloat(s) * 1_000_000);
+    if (/\bb\b/.test(s)) return Math.round(parseFloat(s) * 1_000);
+    // 241 b gibi boşluklu yazımlar:
+    if (/\bmn/.test(s)) return Math.round(parseFloat(s) * 1_000_000);
+    if (/\bb/.test(s)) return Math.round(parseFloat(s) * 1_000);
+    // çıplak sayı
+    const n = parseFloat(s.replace(/[^\d.]/g, ''));
+    return Number.isFinite(n) ? Math.round(n) : null;
   }
 
-  function ensurePanel() {
-    let panel = document.getElementById("statbase-panel");
-    if (!panel) {
-      panel = document.createElement("div");
-      panel.id = "statbase-panel";
-      panel.innerHTML = `
-        <div class="sb-title">StatBase · Instagram</div>
-        <div class="sb-meta">@<span id="sb-username">?</span></div>
-        <hr class="sb-hr"/>
-        <div class="sb-row"><div>Takipçi</div><div class="sb-badge" id="sb-followers">-</div></div>
-        <div class="sb-row"><div>Takip</div><div class="sb-badge" id="sb-following">-</div></div>
-        <div class="sb-row"><div>Gönderi</div><div class="sb-badge" id="sb-posts">-</div></div>
-        <hr class="sb-hr"/>
-        <div class="sb-row"><div>Analiz Edilen Post</div><div class="sb-badge" id="sb-analyzed">0/12</div></div>
-        <div class="sb-row"><div>Ortalama Beğeni</div><div class="sb-badge" id="sb-like-avg">-</div></div>
-        <div class="sb-row"><div>Ortalama Yorum</div><div class="sb-badge" id="sb-comment-avg">-</div></div>
-        <div class="sb-row"><div><b>Ortalama ER</b></div><div class="sb-badge" id="sb-er">-</div></div>
-        <div class="sb-loading" id="sb-loading">Yükleniyor…</div>
-        <div class="sb-err" id="sb-error"></div>
-        <hr class="sb-hr"/>
-        <div class="sb-footer"><span>son 12 gönderi (pinli hariç)</span></div>
-      `;
-      document.documentElement.appendChild(panel);
-    }
-    return panel;
+  function isInViewport(el) {
+    const r = el.getBoundingClientRect();
+    if (!r || r.width === 0 || r.height === 0) return false;
+    const vh = window.innerHeight || document.documentElement.clientHeight;
+    const vw = window.innerWidth || document.documentElement.clientWidth;
+    return r.top < vh && r.bottom > 0 && r.left < vw && r.right > 0;
   }
 
-  function setText(id, val) { const el = document.getElementById(id); if (el) el.textContent = val; }
-  function fmt(n) { return isFinite(n) ? n.toLocaleString("tr-TR") : "-"; }
-  function usernameFromUrl() {
-    const p = location.pathname.split("?")[0].split("#")[0].split("/").filter(Boolean);
-    return p[0] || "";
+  function fireHover(el) {
+    const opts = { bubbles: true, cancelable: true, view: window };
+    el.dispatchEvent(new MouseEvent('mouseover', opts));
+    el.dispatchEvent(new MouseEvent('mouseenter', opts));
+    el.dispatchEvent(new MouseEvent('mousemove', opts));
+    if (el.focus) el.focus({ preventScroll: true });
   }
-  function showError(msg) { setText("sb-error", msg || ""); }
 
-  // ---------- IG Web API ----------
-  async function fetchIgProfile(username) {
-    // IG web app id – web_profile_info için gerekli
-    const APP_ID = "936619743392459";
-    const url = `https://www.instagram.com/api/v1/users/web_profile_info/?username=${encodeURIComponent(username)}`;
+  // Overlay içindeki ul>li>span sayıları
+  function readOverlayCounts(anchor) {
+    // IG markup sık değişiyor; ama grid kart içinde overlay <ul> var.
+    // En güvenlisi: anchor içindeki görünür UL bul, içindeki tüm span sayılarını topla.
+    const overlayUl = anchor.querySelector('ul');
+    if (!overlayUl) return null;
 
-    const res = await fetch(url, {
-      credentials: "include",
-      headers: { "X-IG-App-ID": APP_ID }
-    });
-
-    if (!res.ok) {
-      throw new Error(`web_profile_info failed: ${res.status}`);
-    }
-    const j = await res.json();
-    const user = j?.data?.user;
-    if (!user) throw new Error("user not found");
-
-    // Profil sayıları
-    const followers = user.edge_followed_by?.count ?? 0;
-    const following = user.edge_follow?.count ?? 0;
-    const postsCount = user.edge_owner_to_timeline_media?.count ?? 0;
-
-    // Son 12 gönderi – pinlileri ele
-    const edges = (user.edge_owner_to_timeline_media?.edges ?? [])
-      .filter(e => !e?.node?.is_pinned)
-      .slice(0, 12);
-
-    let ok = 0, likeSum = 0, comSum = 0;
-    for (const e of edges) {
-      const n = e.node || {};
-      const likes = n.edge_media_preview_like?.count ?? 0;
-      const comments = n.edge_media_to_comment?.count ?? 0;
-      if (likes + comments > 0) {
-        ok++; likeSum += likes; comSum += comments;
-      }
+    // görünür mü?
+    const style = window.getComputedStyle(overlayUl);
+    if (style && (style.visibility === 'hidden' || style.display === 'none' || parseFloat(style.opacity) < 0.05)) {
+      // bazen UL var ama kapalı
+      return null;
     }
 
-    const likeAvg = ok ? Math.round(likeSum / ok) : 0;
-    const comAvg  = ok ? Math.round(comSum / ok)  : 0;
-    const erPct   = (ok && followers) ? (((likeSum + comSum) / ok) / followers * 100) : 0;
+    const spans = overlayUl.querySelectorAll('li span');
+    if (!spans || spans.length === 0) return null;
 
+    const texts = [...spans].map(s => s.textContent?.trim()).filter(Boolean);
+    if (!texts.length) return null;
+
+    // tipik sırayla (izlenme/beğeni, yorum) olabiliyor; ikisini de döndürelim
+    const counts = texts.map(parseCount).filter(v => v !== null);
+    if (!counts.length) return null;
+
+    // En fazla 2 sayı bekleriz ama değişirse bozulmasın
     return {
-      followers, following, postsCount,
-      analyzed: ok, likeAvg, comAvg, erPct: Number(erPct.toFixed(2))
+      rawTexts: texts,
+      counts,
+      likeOrViews: counts[0] ?? null,
+      comments: counts[1] ?? null
     };
   }
 
-  // ---------- Akış ----------
-  async function run() {
-    if (STATE.running) return;
-    STATE.running = true;
+  async function hoverAndRead(anchor, retries = 3, delayMs = 160) {
+    // görünür değilse merkeze getir
+    if (!isInViewport(anchor)) {
+      anchor.scrollIntoView({ block: 'center', inline: 'center', behavior: 'instant' });
+      await SLEEP(120);
+    }
+    for (let i = 0; i < retries; i++) {
+      fireHover(anchor);
+      await SLEEP(delayMs);
+      const res = readOverlayCounts(anchor);
+      if (res) return res;
+      // bazen IG overlay'i geç yüklüyor; bir daha deneriz
+    }
+    return null;
+  }
 
-    ensurePanel();
-    setText("sb-error", "");
-    setText("sb-loading", "Yükleniyor…");
-
-    try {
-      const uname = usernameFromUrl();
-      setText("sb-username", uname);
-
-      // IG Web API'den çek
-      const stats = await fetchIgProfile(uname);
-
-      // Paneli doldur
-      setText("sb-followers", fmt(stats.followers));
-      setText("sb-following", fmt(stats.following));
-      setText("sb-posts", fmt(stats.postsCount));
-      setText("sb-analyzed", `${stats.analyzed}/12`);
-      setText("sb-like-avg", stats.analyzed ? fmt(stats.likeAvg) : "-");
-      setText("sb-comment-avg", stats.analyzed ? fmt(stats.comAvg) : "-");
-      setText("sb-er", stats.analyzed ? `${stats.erPct}%` : "-");
-      setText("sb-loading", "");
-
-      if (!stats.analyzed) {
-        showError("Gönderi verisi bulunamadı (pinli/yorum kapalı olabilir).");
+  function findPostAnchors(limit = Infinity) {
+    // Profil gridindeki gönderi linkleri: hem /p/ hem /reel/
+    // IG dom'u sık değiştiği için geniş seçim yapıp filtrele.
+    const anchors = [...document.querySelectorAll('a[href]')].filter(a => {
+      const h = a.getAttribute('href') || '';
+      // /p/xyz/ veya /reel/xyz/
+      return /^\/(p|reel)\//.test(h);
+    });
+    // Aynı href birden fazla olabilir; unique’leyelim
+    const seen = new Set();
+    const uniq = [];
+    for (const a of anchors) {
+      const h = a.getAttribute('href');
+      if (!seen.has(h)) {
+        seen.add(h);
+        uniq.push(a);
+        if (uniq.length >= limit) break;
       }
-    } catch (e) {
-      console.warn("StatBase error:", e);
-      showError("Veri alınamadı. Instagram oturum açık mı? (Sayfayı yenileyip tekrar deneyin.)");
-      setText("sb-loading", "");
-    } finally {
-      STATE.running = false;
     }
+    return uniq;
   }
 
-  function bootWhenReady() {
-    if (!isProfilePage()) return;
-    ensurePanel();
-    setTimeout(run, 800);
+  async function scrapeGrid({ limit = 60, perPostRetries = 3 } = {}) {
+    const anchors = findPostAnchors(limit);
+    const results = [];
+    let idx = 0;
+
+    for (const a of anchors) {
+      idx++;
+      const href = a.getAttribute('href');
+      try {
+        const data = await hoverAndRead(a, perPostRetries);
+        results.push({
+          index: idx,
+          url: location.origin + href,
+          success: Boolean(data),
+          likeOrViews: data?.likeOrViews ?? null,
+          comments: data?.comments ?? null,
+          rawTexts: data?.rawTexts ?? null
+        });
+      } catch (e) {
+        results.push({
+          index: idx,
+          url: location.origin + href,
+          success: false,
+          error: String(e)
+        });
+      }
+      // Hover state’i sıfırlamak için body’e mousemove
+      document.body.dispatchEvent(new MouseEvent('mousemove', { bubbles: true, cancelable: true, view: window, clientX: 0, clientY: 0 }));
+      await SLEEP(60);
+    }
+    return results;
   }
 
-  // İlk yük
-  bootWhenReady();
+  // Konsoldan çağırmak için:
+  window.igScrapeGrid = async (opts) => {
+    const out = await scrapeGrid(opts || {});
+    console.table(out.map(({ index, url, likeOrViews, comments, success }) => ({ index, url, likeOrViews, comments, success })));
+    return out;
+  };
 
-  // SPA geçişleri
-  let lastPath = location.pathname;
-  const ob = new MutationObserver(() => {
-    if (location.pathname !== lastPath) {
-      lastPath = location.pathname;
-      document.getElementById("statbase-panel")?.remove();
-      bootWhenReady();
-    }
-  });
-  ob.observe(document.documentElement, { childList: true, subtree: true });
+  // Extension’dan tetiklemek için:
+  if (typeof chrome !== 'undefined' && chrome.runtime?.onMessage) {
+    chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
+      if (msg?.cmd === 'scrape') {
+        (async () => {
+          try {
+            const data = await scrapeGrid(msg?.options || {});
+            sendResponse({ ok: true, data });
+          } catch (err) {
+            sendResponse({ ok: false, error: String(err) });
+          }
+        })();
+        return true; // async response
+      }
+    });
+  }
 })();
