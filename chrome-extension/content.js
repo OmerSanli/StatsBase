@@ -55,26 +55,31 @@
     return panel;
   }
 
-  // Metin -> sayı (1.234, 1,234, 1.2k vb.)
-  function parseCount(txt) {
-    if (!txt) return 0;
-    txt = ("" + txt).trim().toLowerCase();
+  // Metin -> sayı (1.234, 1,234, 241 B, 2.3 Mn, 7k, 1.2m vb.)
+function parseCount(txt) {
+  if (!txt) return 0;
+  txt = ("" + txt).trim().toLowerCase().replace(/\u00A0/g, " "); // NBSP fix
 
-    // 1.2k / 3,4k gibi
-    const kMatch = txt.match(/^([\d\.,]+)\s*k$/i);
-    const mMatch = txt.match(/^([\d\.,]+)\s*m$/i);
-    if (kMatch) return Math.round(parseFloat(kMatch[1].replace(",", ".").replace(/\./g, ".")) * 1000);
-    if (mMatch) return Math.round(parseFloat(mMatch[1].replace(",", ".").replace(/\./g, ".")) * 1000000);
+  // Türkçe ve İngilizce kısaltmalar:
+  // B / k  -> bin (x1000)
+  // mn / m -> milyon (x1_000_000)
+  const bn = txt.match(/^([\d\.,\s]+)\s*(b|k)\b/i);        // 241 B, 7k
+  const mn = txt.match(/^([\d\.,\s]+)\s*(mn|m)\b/i);       // 2.3 Mn, 1.2m
+  if (bn) return Math.round(parseFloat(bn[1].replace(/\./g, "").replace(",", ".")) * 1000);
+  if (mn) return Math.round(parseFloat(mn[1].replace(/\./g, "").replace(",", ".")) * 1000000);
 
-    // 1.234 / 1,234 / 12 345
-    const normalized = txt.replace(/\s/g, "").replace(/\.(?=\d{3}\b)/g, "").replace(/,(?=\d{3}\b)/g, "");
-    const n = parseInt(normalized.replace(/\D/g, ""), 10);
-    if (!isNaN(n)) return n;
+  // 1.234 / 1,234 / 12 345 gibi binlik ayırıcıları temizle
+  const normalized = txt
+    .replace(/\s/g, "")
+    .replace(/\.(?=\d{3}\b)/g, "")
+    .replace(/,(?=\d{3}\b)/g, "");
+  const n = parseInt(normalized.replace(/[^\d]/g, ""), 10);
+  if (!isNaN(n)) return n;
 
-    // Fallback
-    const f = parseFloat(txt.replace(",", "."));
-    return isNaN(f) ? 0 : Math.round(f);
-  }
+  const f = parseFloat(txt.replace(".", "").replace(",", "."));
+  return isNaN(f) ? 0 : Math.round(f);
+}
+
 
   // Header’dan kullanıcı adı
   function getUsername() {
@@ -112,83 +117,92 @@
     return { followers, following, posts };
   }
 
-  // Grid’den son 12 gönderi linki (pinlileri atla)
-  function readLastPostLinks(limit = 12) {
-    const links = Array.from(document.querySelectorAll('a[href^="/p/"]'))
-      .filter(a => {
-        // Aynı link tekrarını önle
-        return a.getAttribute("href").startsWith("/p/");
-      });
+  // Grid’den son 12 gönderi linki (reels + post; pinlileri atla)
+function readLastPostLinks(limit = 12) {
+  const q = Array.from(document.querySelectorAll('a[href^="/p/"], a[href^="/reel/"]'));
+  const filtered = [];
+  const seen = new Set();
 
-    // Pinli olanları ele (tile içinde pin ikonlu svg olabilir)
-    const filtered = [];
-    const seen = new Set();
+  for (const a of q) {
+    const href = a.getAttribute("href");
+    if (!href) continue;
+    const path = href.split("?")[0];
+    if (!path.startsWith("/p/") && !path.startsWith("/reel/")) continue;
+    if (seen.has(path)) continue;
 
-    for (const a of links) {
-      const href = new URL(a.href);
-      const key = href.pathname;
-      if (seen.has(key)) continue;
+    // Pin ikonları: "Pinned" / "Sabitlenmiş"
+    const isPinned =
+      a.querySelector('svg[aria-label="Pinned"], svg[aria-label="Sabitlenmiş"]') ||
+      a.closest("div")?.querySelector('svg[aria-label="Pinned"], svg[aria-label="Sabitlenmiş"]');
+    if (isPinned) continue;
 
-      // Pin kontrol: a içinde aria-label="Pinned" svg ya da "Sabitlenmiş" olabiliyor
-      const hasPinnedIcon = a.querySelector('svg[aria-label="Pinned"], svg[aria-label="Sabitlenmiş"]');
-      if (hasPinnedIcon) continue;
-
-      seen.add(key);
-      filtered.push(href.toString());
-      if (filtered.length >= limit) break;
-    }
-    return filtered;
+    seen.add(path);
+    filtered.push(new URL(path, location.origin).toString());
+    if (filtered.length >= limit) break;
   }
+
+  // Yetersizse hafif scroll dene (SPA grid daha fazla öğe yükler)
+  if (filtered.length < limit) {
+    window.scrollBy({ top: 1200, behavior: "instant" });
+  }
+  return filtered.slice(0, limit);
+}
 
   // Post sayfasından like/comment çek (JSON-LD varsa)
-  async function fetchPostStats(postUrl) {
-    try {
-      const res = await fetch(postUrl, { credentials: "include" });
-      const html = await res.text();
-      // JSON-LD ara
-      const m = html.match(/<script type="application\/ld\+json">([\s\S]*?)<\/script>/);
-      if (m) {
-        try {
-          const json = JSON.parse(m[1]);
-          // Instagram bazen array döndürebiliyor
-          const data = Array.isArray(json) ? json[0] : json;
+  // Post sayfasından like/comment çek (JSON-LD + güçlü regex fallback)
+async function fetchPostStats(postUrl) {
+  try {
+    const res = await fetch(postUrl, { credentials: "include" });
+    const html = await res.text();
 
-          let like = 0, comment = 0;
+    // 1) JSON-LD (varsa en temiz yol)
+    const m = html.match(/<script type="application\/ld\+json">([\s\S]*?)<\/script>/);
+    if (m) {
+      try {
+        const json = JSON.parse(m[1]);
+        const data = Array.isArray(json) ? json[0] : json;
+        let like = 0, comment = 0;
 
-          // interactionStatistic -> userInteractionCount (like)
-          if (data.interactionStatistic) {
-            const arr = Array.isArray(data.interactionStatistic) ? data.interactionStatistic : [data.interactionStatistic];
-            const likeItem = arr.find(x => (x.interactionType && (x.interactionType.endsWith("LikeAction") || x.interactionType === "http://schema.org/LikeAction")) || x.name === "Likes");
-            if (likeItem && likeItem.userInteractionCount != null) like = parseCount(String(likeItem.userInteractionCount));
+        if (data.interactionStatistic) {
+          const arr = Array.isArray(data.interactionStatistic)
+            ? data.interactionStatistic
+            : [data.interactionStatistic];
+          const likeItem = arr.find(x =>
+            (x.interactionType && /LikeAction/i.test(x.interactionType)) || x.name === "Likes"
+          );
+          if (likeItem && likeItem.userInteractionCount != null) {
+            like = parseCount(String(likeItem.userInteractionCount));
           }
-
-          // commentCount
-          if (data.commentCount != null) {
-            comment = parseCount(String(data.commentCount));
-          }
-
-          // Fallback: meta etiketlerinden
-          if (like === 0) {
-            const metaLike = html.match(/"edge_media_preview_like":\{"count":(\d+)\}/) || html.match(/"edge_liked_by":\{"count":(\d+)\}/);
-            if (metaLike) like = parseInt(metaLike[1], 10);
-          }
-          if (comment === 0) {
-            const metaCom = html.match(/"edge_media_to_parent_comment":\{"count":(\d+)\}/);
-            if (metaCom) comment = parseInt(metaCom[1], 10);
-          }
-
-          return { like, comment, ok: true };
-        } catch (e) {
-          // JSON parse hatası -> fallback dene
         }
-      }
-
-      // Her iki yöntem de başarısızsa
-      return { like: 0, comment: 0, ok: false };
-    } catch (e) {
-      return { like: 0, comment: 0, ok: false };
+        if (data.commentCount != null) {
+          comment = parseCount(String(data.commentCount));
+        }
+        if (like || comment) return { like, comment, ok: true };
+      } catch (_) { /* parse hatası → fallback */ }
     }
+
+    // 2) Güçlü regex fallback (Reels + Foto/Video)
+    // Beğeni
+    let like = 0;
+    let m1 =
+      html.match(/"edge_liked_by":\{"count":(\d+)\}/) ||
+      html.match(/"edge_media_preview_like":\{"count":(\d+)\}/) ||
+      html.match(/"like_count":\s*(\d+)/); // bazı Reels JSON’larında
+    if (m1) like = parseInt(m1[1], 10);
+
+    // Yorum
+    let comment = 0;
+    let m2 =
+      html.match(/"edge_media_to_parent_comment":\{"count":(\d+)\}/) ||
+      html.match(/"comment_count":\s*(\d+)/);
+    if (m2) comment = parseInt(m2[1], 10);
+
+    return { like, comment, ok: (like + comment) > 0 };
+  } catch (_) {
+    return { like: 0, comment: 0, ok: false };
   }
+}
+
 
   function formatNumber(n) {
     if (!isFinite(n)) return "-";
