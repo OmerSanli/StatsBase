@@ -1,18 +1,26 @@
 {
   "manifest_version": 3,
-  "name": "Instagram Stats Extension",
-  "version": "1.0",
-  "description": "Injects session ID and shows interaction rate on Instagram profiles.",
-  "permissions": ["cookies", "webRequest", "webRequestBlocking"],
-  "host_permissions": ["https://www.instagram.com/*"],
-  "background": {
-    "service_worker": "background.js"
+  "name": "StatBase",
+  "description": "Instagram profil ve post sayfalarında ajanslık metrikler: son 12 gönderi üzerinden etkileşim oranı.",
+  "version": "0.1.0",
+  "icons": {
+    "16": "icons/icon16.png",
+    "32": "icons/icon32.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
   },
   "content_scripts": [
     {
-      "matches": ["https://www.instagram.com/*"],
-      "js": ["content-script.js"],
+      "matches": [
+        "https://www.instagram.com/*"
+      ],
+      "js": ["content.js"],
+      "css": ["panel.css"],
       "run_at": "document_idle"
     }
-  ]
+  ],
+  "host_permissions": [
+    "https://www.instagram.com/*"
+  ],
+  "permissions": []
 }
