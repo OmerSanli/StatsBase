@@ -11,7 +11,8 @@ function App() {
   const [coldStart, setColdStart] = useState(false);
   const [sessionid, setSessionid] = useState("");
 
-  const fetchUserData = async (username) => {
+  const fetchUserData = async (name) => {
+    setUsername(name);
     if (!sessionid) {
       alert("Önce Instagram sessionID girin.");
       return;
@@ -24,7 +25,7 @@ function App() {
     const timeout = setTimeout(() => setColdStart(true), 3000);
 
     try {
-      const res = await fetch(`http://127.0.0.1:8000/api/instagram/${username}`, {
+      const res = await fetch(`http://127.0.0.1:8000/api/instagram/${name}`, {
         headers: {
           "X-IG-Session": sessionid
         }
