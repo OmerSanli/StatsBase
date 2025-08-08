@@ -1,0 +1,18 @@
+{
+  "manifest_version": 3,
+  "name": "Instagram Stats Extension",
+  "version": "1.0",
+  "description": "Injects session ID and shows interaction rate on Instagram profiles.",
+  "permissions": ["cookies", "declarativeNetRequest"],
+  "host_permissions": ["https://www.instagram.com/*"],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": ["https://www.instagram.com/*"],
+      "js": ["content-script.js"],
+      "run_at": "document_idle"
+    }
+  ]
+}
